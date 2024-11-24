@@ -2620,11 +2620,14 @@ void Downloader::processCloudSaveUploadQueue(Config conf, const unsigned int& ti
 
         std::string filecontents;
         {
-            std::ifstream in { csf.location, std::ios_base::in | std::ios_base::binary };
-
-            in >> filecontents;
-
-            in.close();
+            // Compress file data
+            std::ifstream inStream { csf.location, std::ios_base::in | std::ios_base::binary };
+            std::ostringstream outStream;
+            boost::iostreams::filtering_istreambuf in;
+            in.push(boost::iostreams::gzip_compressor(boost::iostreams::gzip_params(6)));
+            in.push(inStream);
+            boost::iostreams::copy(in, outStream);
+            filecontents = outStream.str();
         }
 
         ChunkMemoryStruct cms {
