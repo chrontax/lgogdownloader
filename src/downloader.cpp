@@ -22,6 +22,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
 #include <tinyxml2.h>
 #include <json/json.h>
 #include <termios.h>
@@ -2884,8 +2885,16 @@ void Downloader::processCloudSaveDownloadQueue(Config conf, const unsigned int& 
 
         if (result == CURLE_OK || result == CURLE_RANGE_ERROR || (result == CURLE_HTTP_RETURNED_ERROR && response_code == 416))
         {
+            // Decompress "filename.~incomplete" into "filename"
+            std::ifstream inStream(filepath.string(), std::ios_base::in);
+            std::ofstream outStream(csf.location, std::ios_base::out);
+            boost::iostreams::filtering_istreambuf in;
+            in.push(boost::iostreams::gzip_decompressor());
+            in.push(inStream);
+            boost::iostreams::copy(in, outStream);
+
             // Set timestamp for downloaded file to same value as file on server
-            // and rename "filename.~incomplete" to "filename"
+            // and remove "filename.~incomplete"
             long filetime = -1;
             CURLcode res = curl_easy_getinfo(dlhandle, CURLINFO_FILETIME, &filetime);
             if (res == CURLE_OK && filetime >= 0)
@@ -2893,7 +2902,7 @@ void Downloader::processCloudSaveDownloadQueue(Config conf, const unsigned int& 
                 std::time_t timestamp = (std::time_t)filetime;
                 try
                 {
-                    boost::filesystem::rename(filepath, csf.location);
+                    boost::filesystem::remove(filepath);
                     boost::filesystem::last_write_time(csf.location, timestamp);
                 }
                 catch(const boost::filesystem::filesystem_error& e)
